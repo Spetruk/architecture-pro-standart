@@ -1,0 +1,102 @@
+@startuml container_diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров C4: Архитектура системы онлайн депозитов (MVP)
+
+' Персоны
+Person(new_client, "Новые клиенты")
+Person(existing_client, "Существующие клиенты")
+Person(call_center_staff, "Операторы кол-центра")
+Person(back_office_staff, "Сотрудники бэк-офиса")
+
+' Границы системы депозитов
+System_Boundary(deposit_system_boundary, "Система онлайн депозитов") {
+
+    ' Frontend контейнеры
+    Container(website_frontend, "Веб-сайт", "React.js, HTML5", "Публичный сайт для новых клиентов")
+    Container(internet_banking_frontend, "Интернет-банк", "ASP.NET MVC", "Модернизированный интернет-банк с депозитным модулем")
+
+    ' API Gateway
+    Container(api_gateway, "API Gateway", "ASP.NET Core", "Маршрутизация запросов, авторизация, единая точка входа")
+
+    ' Микросервисы
+    Container(deposit_service, "Deposit Service", "ASP.NET Core", "Управление депозитными заявками, бизнес-логика депозитов")
+    Container(rate_service, "Rate Management Service", "Java Spring Boot", "Управление ставками депозитов, персонализация")
+    Container(notification_service, "Notification Service", "ASP.NET Core", "СМС и email уведомления клиентов")
+    Container(integration_service, "Integration Service", "Java Spring Boot", "Интеграция с АБС, адаптер legacy систем")
+
+    ' Базы данных
+    ContainerDb(deposit_db, "Deposit Database", "MS SQL Server", "Хранение заявок на депозиты, статусы обработки")
+    ContainerDb(rate_db, "Rate Database", "MS SQL Server", "Хранение ставок депозитов, правила расчета")
+    ContainerDb(redis_cache, "Redis Cache", "Redis", "Кэширование ставок, пользовательских сессий")
+
+    ' Очереди сообщений
+    Container(kafka_queue, "Message Queue", "Apache Kafka", "Асинхронная обработка событий между сервисами")
+}
+
+' Внешние системы
+System_Ext(abs_external, "АБС", "Автоматизированная банковская система для обработки заявок", "Oracle, Delphi, PL-SQL")
+System_Ext(call_center_external, "Система кол-центра", "CRM система для обработки обращений", "React.js, Spring Boot, PostgreSQL")
+System_Ext(sms_external, "СМС-шлюз", "Внешний сервис отправки СМС уведомлений")
+
+' Взаимодействия клиентов с frontend
+Rel(new_client, website_frontend, "Просмотр депозитов, подача заявок", "HTTPS")
+Rel(existing_client, internet_banking_frontend, "Авторизация, управление депозитами", "HTTPS")
+
+' Frontend к API Gateway
+Rel(website_frontend, api_gateway, "REST API вызовы", "HTTPS/JSON")
+Rel(internet_banking_frontend, api_gateway, "REST API вызовы", "HTTPS/JSON")
+
+' API Gateway к микросервисам
+Rel(api_gateway, deposit_service, "Маршрутизация запросов на депозиты", "HTTP/JSON")
+Rel(api_gateway, rate_service, "Маршрутизация запросов на ставки", "HTTP/JSON")
+Rel(api_gateway, notification_service, "Маршрутизация уведомлений", "HTTP/JSON")
+
+' Микросервисы к базам данных
+Rel(deposit_service, deposit_db, "Сохранение/чтение заявок", "SQL/TCP")
+Rel(rate_service, rate_db, "Управление ставками", "SQL/TCP")
+Rel(rate_service, redis_cache, "Кэширование ставок", "Redis Protocol")
+
+' Микросервисы к Kafka
+Rel(deposit_service, kafka_queue, "Публикация событий заявок", "Kafka Protocol")
+Rel(integration_service, kafka_queue, "Подписка на события", "Kafka Protocol")
+Rel(notification_service, kafka_queue, "События уведомлений", "Kafka Protocol")
+
+' Интеграции с внешними системами
+Rel(integration_service, abs_external, "Batch интеграция заявок", "File Transfer/раз в день")
+Rel(notification_service, call_center_external, "Уведомления о заявках", "REST API")
+Rel(notification_service, sms_external, "Отправка СМС", "REST API")
+
+' Взаимодействия персонала
+Rel(call_center_staff, call_center_external, "Обработка обращений", "Web UI")
+Rel(back_office_staff, abs_external, "Обработка депозитных заявок", "Desktop App")
+
+' Заметки об архитектуре
+note right of api_gateway
+  **API Gateway функции:**
+  • Аутентификация/авторизация
+  • Rate limiting
+  • Request/Response логирование
+  • Маршрутизация по версиям API
+end note
+
+note right of kafka_queue
+  **Event-Driven Architecture:**
+  • deposit.application.created
+  • deposit.application.approved
+  • deposit.rate.updated
+  • notification.sms.requested
+end note
+
+note bottom of deposit_system_boundary
+  **Технологический стек:**
+  Frontend: React.js, ASP.NET MVC • Backend: ASP.NET Core, Java Spring Boot
+  Databases: MS SQL Server, Redis • Message Queue: Apache Kafka • Security: HTTPS/TLS
+
+  **Паттерны архитектуры:**
+  • Microservices Architecture • API Gateway Pattern • Event Sourcing
+  • CQRS (для ставок) • Circuit Breaker • Saga Pattern (для транзакций)
+end note
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,117 @@
+@startuml container_diagram_rates
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров C4: Система распространения ставок в кол-центры
+
+' Персоны
+Person(rate_managers, "Сотрудники кредитного отдела")
+Person(internal_operators, "Операторы кол-центра")
+Person(partner_operators, "Операторы партнёрского кол-центра")
+
+' Границы системы распространения ставок
+System_Boundary(rate_distribution_boundary, "Система распространения ставок") {
+
+    ' Существующие компоненты (из MVP)
+    Container(rate_service, "Rate Management Service", "Java Spring Boot", "Управление ставками депозитов, бизнес-логика расчета")
+    ContainerDb(rate_db, "Rate Database", "MS SQL Server", "Хранение ставок депозитов и правил расчета")
+    ContainerDb(redis_cache, "Redis Cache", "Redis", "Кэширование актуальных ставок")
+
+    ' Новые компоненты для распространения
+    Container(rate_distribution_service, "Rate Distribution Service", "Java Spring Boot", "Сервис распространения ставок по каналам")
+    Container(file_export_service, "File Export Service", "Java Spring Boot", "Генерация файлов со ставками для внешних систем")
+    Container(sftp_gateway, "SFTP Gateway", "Java Spring Boot + Apache MINA", "Загрузка файлов на SFTP сервер")
+    Container(rate_sync_api, "Rate Sync API", "Java Spring Boot", "REST API для синхронизации ставок")
+    Container(monitoring_service, "Monitoring Service", "Java Spring Boot", "Мониторинг доставки ставок")
+
+    ' Очереди и события
+    Container(kafka_rates, "Kafka Topics", "Apache Kafka", "rate.updated, rate.distributed, file.generated")
+}
+
+' Внешние системы
+System_Ext(internal_call_center, "Система кол-центра банка", "CRM система с локальной БД ставок")
+System_Ext(partner_call_center, "Система партнёрского кол-центра", "Внешняя система партнёра")
+System_Ext(sftp_server, "SFTP Сервер", "Файловый сервер для обмена со ставками")
+
+' Связанные системы
+System_Ext(deposit_system_ext, "Система онлайн депозитов", "Основная система MVP")
+
+' Внешние базы данных кол-центров
+ContainerDb_Ext(callcenter_db, "Call Center DB", "PostgreSQL", "Локальная БД ставок кол-центра")
+ContainerDb_Ext(partner_db, "Partner DB", "External DB", "БД партнёрского кол-центра")
+
+' Взаимодействия персон
+Rel(rate_managers, rate_service, "Управление ставками", "Web UI")
+Rel(internal_operators, internal_call_center, "Консультации по ставкам", "Web UI")
+Rel(partner_operators, partner_call_center, "Консультации по ставкам", "External UI")
+
+' Основной поток данных ставок
+Rel(rate_service, rate_db, "Сохранение ставок", "SQL")
+Rel(rate_service, redis_cache, "Кэширование ставок", "Redis Protocol")
+Rel(rate_service, kafka_rates, "Публикация события rate.updated", "Kafka")
+
+' Распространение ставок
+Rel(rate_distribution_service, kafka_rates, "Подписка на rate.updated", "Kafka")
+Rel(rate_distribution_service, rate_sync_api, "Инициация синхронизации", "Internal API")
+Rel(rate_distribution_service, file_export_service, "Запрос генерации файла", "Internal API")
+
+' API синхронизация с внутренним кол-центром
+Rel(rate_sync_api, redis_cache, "Получение актуальных ставок", "Redis Protocol")
+Rel(internal_call_center, rate_sync_api, "Синхронизация ставок", "REST API/HTTPS")
+Rel(internal_call_center, callcenter_db, "Сохранение ставок", "SQL")
+
+' Файловая синхронизация с партнёрским кол-центром
+Rel(file_export_service, redis_cache, "Получение ставок для экспорта", "Redis Protocol")
+Rel(file_export_service, sftp_gateway, "Отправка сгенерированного файла", "Internal API")
+Rel(sftp_gateway, sftp_server, "Загрузка файла со ставками", "SFTP")
+Rel(partner_call_center, sftp_server, "Скачивание файла со ставками", "SFTP")
+Rel(partner_call_center, partner_db, "Импорт ставок из файла", "File Import")
+
+' Мониторинг
+Rel(monitoring_service, kafka_rates, "Мониторинг событий", "Kafka")
+Rel(monitoring_service, rate_sync_api, "Проверка API доступности", "Health Check")
+Rel(monitoring_service, sftp_server, "Проверка доставки файлов", "SFTP")
+
+' Интеграция с основной системой депозитов
+Rel(deposit_system_ext, rate_sync_api, "Получение ставок для заявок", "REST API")
+
+' События в Kafka
+Rel(file_export_service, kafka_rates, "Публикация file.generated", "Kafka")
+Rel(rate_distribution_service, kafka_rates, "Публикация rate.distributed", "Kafka")
+
+' Заметки об архитектуре
+note right of rate_distribution_service
+  **Центральный компонент:**
+  • Координация всех каналов распространения
+  • Обработка событий изменения ставок
+  • Управление расписанием синхронизации
+  • Логирование всех операций
+end note
+
+note right of file_export_service
+  **Форматы экспорта:**
+  • JSON для современных систем
+  • CSV для legacy систем
+  • XML при необходимости
+  • Версионирование схем данных
+end note
+
+note bottom of kafka_rates
+  **События системы:**
+  • rate.updated - изменение ставок
+  • rate.distributed - успешная доставка
+  • file.generated - создание файла экспорта
+  • sync.failed - ошибки синхронизации
+end note
+
+note bottom of rate_distribution_boundary
+  **Технологический стек:**
+  Backend: Java Spring Boot • Message Queue: Apache Kafka • Cache: Redis
+  File Transfer: SFTP • API: REST/JSON • Security: HTTPS, SSH Keys
+
+  **Паттерны:**
+  • Publisher-Subscriber • File Transfer Pattern • API Gateway
+  • Circuit Breaker • Retry Pattern • Event Sourcing
+end note
+
+SHOW_LEGEND()
+@enduml

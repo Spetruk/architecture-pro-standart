@@ -1,0 +1,54 @@
+@startuml context_diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста C4: Система онлайн депозитов (MVP)
+
+' Определяем персон и внешние системы
+Person(new_client, "Новые клиенты", "Потенциальные клиенты банка, желающие открыть депозит")
+Person(existing_client, "Существующие клиенты", "Действующие клиенты с доступом к интернет-банкингу")
+Person(call_center_staff, "Операторы кол-центра", "200 операторов для обработки обращений")
+Person(back_office_staff, "Сотрудники бэк-офиса", "50 сотрудников депозитного направления")
+
+' Основная система
+System(deposit_system, "Система онлайн депозитов", "Микросервисная платформа для управления депозитными заявками и ставками", "ASP.NET Core, Java Spring Boot, MS SQL, Redis, Kafka")
+
+' Внешние системы
+System_Ext(website, "Сайт банка", "Публичный веб-сайт для новых клиентов", "React.js, PHP")
+System_Ext(internet_banking, "Интернет-банк", "Система интернет-банкинга для клиентов", "ASP.NET MVC, MS SQL")
+System_Ext(abs_system, "АБС", "Автоматизированная банковская система", "Oracle, Delphi, PL-SQL")
+System_Ext(call_center_system, "Система кол-центра", "CRM система для обработки обращений", "React.js, Spring Boot, PostgreSQL")
+System_Ext(sms_gateway, "СМС-шлюз", "Внешний сервис отправки СМС уведомлений")
+
+' Взаимодействия с клиентами
+Rel(new_client, website, "Просматривает депозиты, подает заявки", "HTTPS")
+Rel(existing_client, internet_banking, "Авторизация, управление депозитами", "HTTPS")
+
+' Взаимодействия с персоналом
+Rel(call_center_staff, call_center_system, "Обработка обращений клиентов", "Web UI")
+Rel(back_office_staff, abs_system, "Обработка депозитных заявок", "Desktop App")
+
+' Интеграции с основной системой
+Rel(website, deposit_system, "API вызовы, депозитные заявки", "REST API/HTTPS")
+Rel(internet_banking, deposit_system, "API интеграция, депозитные операции", "REST API/HTTPS")
+Rel(deposit_system, call_center_system, "Уведомления о заявках", "REST API")
+Rel(deposit_system, abs_system, "Batch интеграция, заявки на обработку", "Batch/раз в день")
+Rel(deposit_system, sms_gateway, "СМС уведомления", "REST API")
+
+' Дополнительные заметки
+note right of deposit_system
+  **Ключевые принципы:**
+  • Микросервисная архитектура
+  • Изоляция от АБС
+  • Event-Driven Architecture
+  • API-first подход
+end note
+
+note bottom
+  **Контекст системы:**
+  Система работает в рамках существующей IT-инфраструктуры банка
+  с интеграцией в АБС через batch-процессы для обеспечения
+  изоляции критичных систем
+end note
+
+SHOW_LEGEND()
+@enduml

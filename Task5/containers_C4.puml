@@ -1,0 +1,133 @@
+@startuml credit_container_diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров C4: Система онлайн кредитования банка "Стандарт"
+
+' Персоны
+Person(existing_client, "Существующие клиенты")
+Person(new_client, "Новые клиенты")
+Person(credit_officers, "Кредитные специалисты")
+Person(call_center_staff, "Операторы кол-центра")
+
+' Границы системы онлайн кредитования
+System_Boundary(online_credit_boundary, "Система онлайн кредитования") {
+
+    ' Frontend расширения
+    Container(credit_module_ib, "Credit Module", "ASP.NET MVC", "Модуль предодобренных кредитов в интернет-банке")
+    Container(credit_landing, "Credit Landing Page", "React.js", "Лендинг кредитных продуктов на сайте с формой заявки")
+
+    ' API Gateway для кредитов
+    Container(credit_api_gateway, "Credit API Gateway", "Java Spring Boot", "Единая точка входа, аутентификация, rate limiting для БКИ")
+
+    ' Микросервисы кредитования
+    Container(credit_application_service, "Credit Application Service", "Java Spring Boot", "Управление жизненным циклом кредитных заявок, валидация, интеграция с конвейером")
+    Container(pre_approval_service, "Pre-approval Service", "Java Spring Boot", "Расчет предодобренных кредитных предложений на основе скоринга")
+    Container(bki_integration_service, "BKI Integration Service", "Java Spring Boot", "Интеграция с БКИ, обработка согласий, circuit breaker")
+    Container(credit_notification_service, "Credit Notification Service", "Java Spring Boot", "Уведомления клиентов о статусе через СМС и email")
+
+    ' Хранилища данных
+    ContainerDb(credit_db, "Credit Database", "MS SQL Server", "Кредитные заявки, предодобрения, логи интеграций, согласия БКИ")
+    ContainerDb(redis_cache, "Redis Cache", "Redis", "Кэш предодобрений, скоринговых данных, session данные")
+
+    ' Очереди событий
+    Container(kafka_credit, "Kafka Credit Topics", "Apache Kafka", "application.submitted, decision.made, notification.sent, bki.checked")
+}
+
+' Внешние системы
+System_Ext(internet_banking_ext, "Интернет-банк", "Основная система интернет-банкинга", "ASP.NET MVC, MS SQL")
+System_Ext(website_ext, "Сайт банка", "Публичный веб-сайт", "React.js, PHP")
+System_Ext(credit_conveyor_ext, "Кредитный конвейер", "Существующая Camunda BPM система", "Camunda, Oracle, Java")
+System_Ext(scoring_system_ext, "Система скоринга", "ML-система оценки", "Python, Flask, PostgreSQL")
+System_Ext(bki_system_ext, "БКИ", "Бюро кредитных историй", "External REST API")
+System_Ext(abs_system_ext, "АБС", "Автоматизированная банковская система", "Oracle, Delphi, PL-SQL")
+System_Ext(call_center_ext, "Система кол-центра", "CRM система", "React.js, Spring Boot, PostgreSQL")
+System_Ext(sms_gateway_ext, "СМС-шлюз + Телеком", "Внешний сервис уведомлений", "REST API")
+
+' Взаимодействия клиентов
+Rel(existing_client, internet_banking_ext, "Авторизация, навигация", "HTTPS")
+Rel(new_client, website_ext, "Просмотр кредитных продуктов", "HTTPS")
+
+' Frontend к внутренним модулям
+Rel(internet_banking_ext, credit_module_ib, "Отображение кредитного функционала", "Internal Call")
+Rel(website_ext, credit_landing, "Кредитные лендинги и формы", "Internal Call")
+
+' Frontend к API Gateway
+Rel(credit_module_ib, credit_api_gateway, "Запросы предодобренных предложений (UC1, UC4)", "HTTPS/JSON")
+Rel(credit_landing, credit_api_gateway, "Отправка кредитных заявок (UC2)", "HTTPS/JSON")
+
+' API Gateway к микросервисам
+Rel(credit_api_gateway, pre_approval_service, "Получение предодобренных предложений", "HTTP/JSON")
+Rel(credit_api_gateway, credit_application_service, "Создание и управление заявками", "HTTP/JSON")
+Rel(credit_api_gateway, bki_integration_service, "Проверка в БКИ для новых клиентов", "HTTP/JSON")
+Rel(credit_api_gateway, credit_notification_service, "Запросы уведомлений", "HTTP/JSON")
+
+' Микросервисы к хранилищам
+Rel(credit_application_service, credit_db, "CRUD операции с заявками", "SQL/TCP")
+Rel(pre_approval_service, credit_db, "Чтение клиентских данных", "SQL/TCP")
+Rel(bki_integration_service, credit_db, "Сохранение согласий и результатов БКИ", "SQL/TCP")
+Rel(pre_approval_service, redis_cache, "Кэширование предодобрений", "Redis Protocol")
+Rel(bki_integration_service, redis_cache, "Кэш данных БКИ", "Redis Protocol")
+
+' Микросервисы к Kafka (Event-Driven Architecture)
+Rel(credit_application_service, kafka_credit, "Публикация: application.submitted", "Kafka Protocol")
+Rel(bki_integration_service, kafka_credit, "Публикация: bki.checked", "Kafka Protocol")
+Rel(credit_notification_service, kafka_credit, "Подписка на все кредитные события", "Kafka Protocol")
+
+' Интеграции с внешними системами
+Rel(bki_integration_service, bki_system_ext, "REST API проверки кредитной истории", "HTTPS/JSON")
+Rel(credit_application_service, credit_conveyor_ext, "Передача заявок в Camunda (UC3)", "REST API")
+Rel(pre_approval_service, scoring_system_ext, "Запросы скоринговой оценки", "REST API")
+Rel(credit_notification_service, call_center_ext, "Уведомления о новых заявках", "REST API")
+Rel(credit_notification_service, sms_gateway_ext, "СМС-уведомления клиентам", "REST API")
+
+' Обратные интеграции
+Rel(credit_conveyor_ext, credit_application_service, "Результаты обработки заявок", "REST API + Kafka")
+Rel(scoring_system_ext, pre_approval_service, "Скоринговые оценки и лимиты", "REST API")
+
+' Batch интеграция с АБС
+Rel(credit_application_service, abs_system_ext, "Batch-синхронизация кредитных данных", "File Transfer/раз в день")
+
+' Взаимодействия персонала с внешними системами
+Rel(credit_officers, credit_conveyor_ext, "Ручная обработка сложных заявок", "Web UI")
+Rel(call_center_staff, call_center_ext, "Консультации по кредитным продуктам", "Web UI")
+
+' Заметки об архитектуре
+note right of credit_api_gateway
+  **API Gateway функции:**
+  • JWT аутентификация клиентов
+  • Rate limiting для БКИ запросов
+  • Маршрутизация по типу клиента
+  • Логирование всех кредитных операций
+  • Circuit breaker для внешних API
+end note
+
+note right of kafka_credit
+  **Кредитные события:**
+  • application.submitted (UC2, UC1)
+  • bki.checked (UC2)
+  • preapproval.calculated (UC4)
+  • decision.made (UC3)
+  • notification.sent
+end note
+
+note bottom of bki_integration_service
+  **BKI Integration:**
+  • Обработка согласий клиентов
+  • Rate limiting (лимиты запросов)
+  • Circuit breaker при недоступности
+  • Кэширование результатов
+  • Соответствие требованиям ЦБ
+end note
+
+note bottom of online_credit_boundary
+  **Технологический стек:**
+  Backend: Java Spring Boot • Frontend: ASP.NET MVC, React.js • Cache: Redis
+  Database: MS SQL Server • Message Queue: Apache Kafka • Workflow: Camunda BPM
+
+  **Архитектурные паттерны:**
+  • Microservices Architecture • Event-Driven Architecture • API Gateway Pattern
+  • Circuit Breaker Pattern • Saga Pattern (для кредитных процессов) • CQRS (предодобрения)
+end note
+
+SHOW_LEGEND()
+@enduml
