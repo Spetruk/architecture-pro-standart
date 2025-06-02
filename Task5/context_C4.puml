@@ -1,0 +1,80 @@
+@startuml credit_context_diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста C4: Онлайн кредитный процесс банка "Стандарт"
+
+' Определяем персон
+Person(existing_client, "Существующие клиенты", "Клиенты банка с доступом к интернет-банку, ~5000 активных пользователей")
+Person(new_client, "Новые клиенты", "Потенциальные клиенты, желающие получить кредит онлайн")
+Person(credit_officers, "Кредитные специалисты", "50 сотрудников управления кредитных продуктов")
+Person(call_center_staff, "Операторы кол-центра", "200 операторов для консультаций по кредитам")
+
+' Основная система кредитования
+System(online_credit_system, "Система онлайн кредитования", "Платформа для подачи и обработки кредитных заявок с предодобренными предложениями и быстрым принятием решений", "Java Spring Boot, Kafka, MS SQL, Redis")
+
+' Внешние системы
+System_Ext(internet_banking, "Интернет-банк", "Модернизированная система с кредитным модулем", "ASP.NET MVC, MS SQL")
+System_Ext(website, "Сайт банка", "Публичный сайт с кредитными лендингами", "React.js, PHP")
+System_Ext(abs_system, "АБС", "Автоматизированная банковская система", "Oracle, Delphi, PL-SQL")
+System_Ext(credit_conveyor, "Кредитный конвейер", "Существующая система обработки кредитных заявок", "Camunda BPM, Oracle, Java")
+System_Ext(scoring_system, "Система скоринга", "ML-система оценки кредитоспособности", "Python, Flask, PostgreSQL")
+System_Ext(bki_system, "Бюро кредитных историй", "Внешняя система проверки кредитных историй", "REST API")
+System_Ext(call_center_system, "Система кол-центра", "CRM для обработки обращений", "React.js, Spring Boot, PostgreSQL")
+System_Ext(sms_gateway, "СМС-шлюз + Телеком", "Сервис отправки уведомлений", "REST API")
+
+' Взаимодействия клиентов с системами
+Rel(existing_client, internet_banking, "Просматривает предодобренные кредиты, подает заявки", "HTTPS")
+Rel(new_client, website, "Заполняет кредитную анкету с паспортными данными", "HTTPS")
+
+' Взаимодействия персонала
+Rel(credit_officers, credit_conveyor, "Обрабатывает кредитные заявки, принимает решения", "Web UI")
+Rel(call_center_staff, call_center_system, "Консультирует клиентов по кредитным продуктам", "Web UI")
+
+' Основные интеграции системы кредитования
+Rel(internet_banking, online_credit_system, "API запросы предодобренных предложений", "REST API/HTTPS")
+Rel(website, online_credit_system, "Отправка кредитных заявок новых клиентов", "REST API/HTTPS")
+
+' Интеграции с core системами
+Rel(online_credit_system, credit_conveyor, "Передача заявок на обработку", "REST API")
+Rel(online_credit_system, scoring_system, "Запросы скоринговой оценки для предодобрений", "REST API")
+Rel(online_credit_system, bki_system, "Проверка кредитных историй новых клиентов", "REST API")
+Rel(online_credit_system, abs_system, "Batch-синхронизация кредитных данных", "File Transfer/раз в день")
+
+' Интеграции с коммуникационными системами
+Rel(online_credit_system, call_center_system, "Уведомления о новых заявках", "REST API")
+Rel(online_credit_system, sms_gateway, "СМС-уведомления о решениях", "REST API")
+
+' Обратные связи от систем
+Rel(credit_conveyor, online_credit_system, "Результаты обработки заявок", "REST API + Events")
+Rel(scoring_system, online_credit_system, "Скоринговые оценки и предодобрения", "REST API")
+Rel(call_center_staff, existing_client, "Консультации по кредитным продуктам", "Телефон")
+Rel(call_center_staff, new_client, "Уточнение данных по заявкам", "Телефон")
+
+' Заметки
+note right of online_credit_system
+  **Ключевые возможности:**
+  • Предодобренные кредитные предложения (UC4)
+  • Онлайн подача заявок для всех типов клиентов
+  • Интеграция с БКИ для новых клиентов (UC2)
+  • Автоматизация принятия решений (UC3)
+  • Быстрое одобрение в течение рабочего дня
+  • События через Kafka для асинхронной обработки
+end note
+
+note bottom of bki_system
+  **БКИ интеграция:**
+  • REST API для проверки кредитной истории
+  • Обязательное согласие клиента на проверку
+  • Лимиты запросов (rate limiting)
+  • Circuit breaker при недоступности
+  • Соответствие требованиям ЦБ
+end note
+
+note top
+  **Бизнес-цель системы:**
+  Привлечение молодой аудитории через быстрые кредитные решения
+  в цифровых каналах с принятием решения в течение одного дня
+end note
+
+SHOW_LEGEND()
+@enduml

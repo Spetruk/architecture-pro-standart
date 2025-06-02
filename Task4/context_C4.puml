@@ -1,0 +1,77 @@
+@startuml context_diagram_rates
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста C4: Система передачи ставок в кол-центры
+
+' Определяем персон
+Person(bank_clients, "Клиенты банка", "Клиенты, нуждающиеся в консультации по депозитным ставкам")
+Person(internal_operators, "Операторы кол-центра", "200 внутренних операторов банка")
+Person(partner_operators, "Операторы партнёрского кол-центра", "100 операторов внешнего кол-центра")
+Person(rate_managers, "Сотрудники кредитного отдела", "Специалисты, управляющие ставками депозитов")
+
+' Основная система (расширенная)
+System(rate_distribution_system, "Система распространения ставок", "Расширенная система управления ставками с компонентами распространения", "Java Spring Boot, Kafka, SFTP")
+
+' Внешние системы
+System_Ext(internal_call_center, "Система кол-центра банка", "Внутренняя CRM система для операторов", "React.js, Spring Boot, PostgreSQL")
+System_Ext(partner_call_center, "Система партнёрского кол-центра", "Внешняя система партнёрского кол-центра", "Внешняя система")
+System_Ext(sftp_server, "SFTP Сервер", "Сервер для обмена файлами с партнёрами", "Linux, OpenSSH")
+
+' Связанные системы из основного MVP
+System_Ext(deposit_system, "Система онлайн депозитов", "Основная система MVP для депозитных заявок")
+System_Ext(website, "Сайт банка", "Веб-сайт для подачи заявок на депозиты")
+System_Ext(internet_banking, "Интернет-банк", "Система интернет-банкинга")
+
+' Взаимодействия с персонами
+Rel(bank_clients, internal_operators, "Звонит для консультации по депозитам", "Телефон")
+Rel(bank_clients, partner_operators, "Звонит для консультации по депозитам", "Телефон")
+Rel(rate_managers, rate_distribution_system, "Управляет ставками депозитов", "Web UI")
+
+' Операторы с системами
+Rel(internal_operators, internal_call_center, "Консультирует клиентов по ставкам", "Web UI")
+Rel(partner_operators, partner_call_center, "Консультирует клиентов по ставкам", "Web UI")
+
+' Интеграции основной системы
+Rel(rate_distribution_system, internal_call_center, "Передача актуальных ставок", "REST API + Events")
+Rel(rate_distribution_system, sftp_server, "Загрузка файлов со ставками", "SFTP")
+Rel(partner_call_center, sftp_server, "Скачивание файлов со ставками", "SFTP")
+
+' Связь с основной системой депозитов
+Rel(rate_distribution_system, deposit_system, "Предоставление ставок для заявок", "Internal API")
+Rel(deposit_system, website, "Отображение ставок на сайте", "")
+Rel(deposit_system, internet_banking, "Отображение ставок в и-банке", "")
+
+' Обратная связь от операторов
+Rel(internal_operators, bank_clients, "Консультирует по депозитным ставкам", "Телефон")
+Rel(partner_operators, bank_clients, "Консультирует и направляет в банк", "Телефон")
+
+' Дополнительные взаимодействия
+Rel(internal_operators, deposit_system, "Помогает клиентам с онлайн-заявками", "")
+Rel(partner_operators, website, "Направляет клиентов на сайт банка", "")
+
+' Заметки
+note right of rate_distribution_system
+  **Новые возможности:**
+  • Real-time sync с внутренним кол-центром
+  • Файловый экспорт для партнёров
+  • Мониторинг доставки ставок
+  • Поддержка множественных форматов
+end note
+
+note bottom of sftp_server
+  **SFTP интеграция:**
+  • Автоматическая генерация файлов
+  • Шифрованная передача данных
+  • Уведомления о новых файлах
+  • Архивирование истории ставок
+end note
+
+note top
+  **Цель системы:**
+  Обеспечение актуальными депозитными ставками всех каналов
+  консультирования клиентов для повышения качества обслуживания
+  и снижения нагрузки на основные каналы обслуживания
+end note
+
+SHOW_LEGEND()
+@enduml
